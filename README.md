@@ -29,7 +29,7 @@ Download [the latest release](https://github.com/f0e/mpv-lossless-cut/releases/l
 | ------------------- | -------------------------------------------------- |
 | **Windows**         | `%appdata%/Roaming/mpv/`                           |
 | **Windows (Scoop)** | `%userprofile%/scoop/persist/mpv/portable_config/` |
-| **Linux**/**MacOS** | `~/.config/mpv/scripts/`                           |
+| **Linux**/**MacOS** | `~/.config/mpv/`                                   |
 
 After that, the next time you run mpv the script will be loaded.
 
