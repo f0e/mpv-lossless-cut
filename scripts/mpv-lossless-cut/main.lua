@@ -9,7 +9,7 @@ options = {
 	multi_cut_mode = "separate"
 }
 
-mp.options.read_options(options, "mpv-cut")
+mp.options.read_options(options, "mpv-lossless-cut")
 
 cuts = {}
 cut_index = 0
@@ -94,4 +94,4 @@ mp.add_key_binding('r', "cut_render", cut_render)
 
 mp.register_event("end-file", on_file_change)
 
-print("mpv-cut loaded")
+print("mpv-lossless-cut loaded")

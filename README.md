@@ -1,4 +1,4 @@
-# mpv-cut
+# mpv-lossless-cut
 
 <p align="center">
   <img alt="preview" src="./assets/demo.gif">
@@ -23,7 +23,7 @@ Besides mpv, you must have the following in your PATH:
 
 ## installation
 
-Download [the latest release](https://github.com/f0e/mpv-cut/releases/latest) and move the folders in the zip into your mpv folder.
+Download [the latest release](https://github.com/f0e/mpv-lossless-cut/releases/latest) and move the folders in the zip into your mpv folder.
 
 | Platform            | Path                                               |
 | ------------------- | -------------------------------------------------- |
@@ -33,11 +33,11 @@ Download [the latest release](https://github.com/f0e/mpv-cut/releases/latest) an
 
 After that, the next time you run mpv the script will be loaded.
 
-Note: mpv-cut should have its own folder inside your scripts folder. (`scripts/mpv-cut/main.lua & make_cuts.js`)
+Note: mpv-lossless-cut should have its own folder inside your scripts folder. (`scripts/mpv-lossless-cut/main.lua & make_cuts.js`)
 
 ## options
 
-`script-opts/mpv-cut.conf`:
+`script-opts/mpv-lossless-cut.conf`:
 
 - `output_dir` - The output directory for cuts, can be relative or absolute.
   - Default value: `.` (will place cuts in the same directory as the original video)
@@ -64,6 +64,6 @@ Rendered cuts will be placed in the same directory as the source file.
 If the script doesn't work, you can try these steps.
 
 - Make sure all of the [requirements](#requirements) are installed
-- Make sure the script is installed in the correct directory. You should end up with something like: `C:\Users\admin\scoop\persist\mpv\portable_config\scripts\mpv-cut\main.lua & make_cuts.js`.
+- Make sure the script is installed in the correct directory. You should end up with something like: `C:\Users\admin\scoop\persist\mpv\portable_config\scripts\mpv-lossless-cut\main.lua & make_cuts.js`.
 - Run mpv using the terminal (`mpv video.mp4`) and check the output, are there any errors?
 - Make sure you don't have multiple versions of mpv installed. You might have installed the script to the wrong version.

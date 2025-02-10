@@ -3,7 +3,7 @@ name: Create Release
 on:
   push:
     tags:
-      - '*'
+      - "*"
 
 permissions:
   contents: write
@@ -19,11 +19,11 @@ jobs:
 
       - name: Create archive
         working-directory: ${{env.GITHUB_WORKSPACE}}
-        run: zip -r mpv-cut.zip scripts script-opts
+        run: zip -r mpv-lossless-cut.zip scripts script-opts
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            mpv-cut.zip
+            mpv-lossless-cut.zip
           fail_on_unmatched_files: true
