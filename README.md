@@ -53,6 +53,9 @@ Note: mpv-lossless-cut should have its own folder inside your scripts folder. (`
 - <kbd>G</kbd> and <kbd>H</kbd> will do the same, but will place the points at the very start or end of the video.
 - <kbd>r</kbd> to render cuts.
 
+- <kbd>ctrl+g</kbd> to toggle between `separate` and `merge` mode.
+- <kbd>ctrl+h</kbd> to clear cuts.
+
 If you want to change the start or end position of a cut you can press the keybind again. You can also create multiple cuts from a single video.
 
 Rendered cuts will be placed in the same directory as the source file.
