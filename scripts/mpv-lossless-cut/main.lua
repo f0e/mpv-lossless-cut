@@ -19,6 +19,11 @@ function log(...)
 	mp.osd_message(...)
 end
 
+function cut_mode_toggle()
+	if options["multi_cut_mode"]=="separate" then options["multi_cut_mode"]="merge" else options["multi_cut_mode"]="separate" end
+	log(string.format("Cut mode set to \"%s\"", options["multi_cut_mode"]))
+end
+
 function cut_render()
 	if cuts[cut_key()] == nil or cuts[cut_key()]['end'] == nil then
 		log("No cuts to render")
@@ -89,6 +94,8 @@ mp.add_key_binding('h', "cut_set_end", function() cut_set_end(mp.get_property_nu
 
 mp.add_key_binding('G', "cut_set_start_sof", function() cut_set_start(0) end)
 mp.add_key_binding('H', "cut_set_end_eof", function() cut_set_end(mp.get_property('duration')) end)
+
+mp.add_key_binding('ctrl+g', "cut_mode_toggle", function() cut_mode_toggle() end)
 
 mp.add_key_binding('r', "cut_render", cut_render)
 
