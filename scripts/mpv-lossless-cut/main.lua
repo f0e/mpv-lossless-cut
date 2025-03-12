@@ -84,9 +84,13 @@ function cut_set_end(end_time)
 	log(string.format("[cut %d] Set end time: %.2fs", cut_index + 1, end_time))
 end
 
-function on_file_change()
-	cuts = {}
-	cut_index = 0
+function cut_clear()
+	local next = next
+	if next(cuts) ~= nil then
+		cuts = {}
+		cut_index = 0
+		print("Cuts cleared")
+	end
 end
 
 mp.add_key_binding('g', "cut_set_start", function() cut_set_start(mp.get_property_number("time-pos")) end)
@@ -96,9 +100,10 @@ mp.add_key_binding('G', "cut_set_start_sof", function() cut_set_start(0) end)
 mp.add_key_binding('H', "cut_set_end_eof", function() cut_set_end(mp.get_property('duration')) end)
 
 mp.add_key_binding('ctrl+G', "cut_toggle_mode", cut_toggle_mode)
+mp.add_key_binding('ctrl+H', "cut_clear", cut_clear)
 
 mp.add_key_binding('r', "cut_render", cut_render)
 
-mp.register_event("end-file", on_file_change)
+mp.register_event("end-file", cut_clear)
 
 print("mpv-lossless-cut loaded")
