@@ -87,6 +87,9 @@ async function renderCut(inpath, outpath, start, duration) {
     // don't re-encode
     "-c",
     "copy",
+    // copy all input streams
+    "-map",
+    "0",
     // shift timestamps so they start at 0
     "-avoid_negative_ts",
     "make_zero",
