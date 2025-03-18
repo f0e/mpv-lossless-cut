@@ -1,6 +1,6 @@
-const fs = require("fs");
-const child_process = require("child_process");
-const path = require("path");
+const fs = require("node:fs");
+const child_process = require("node:child_process");
+const path = require("node:path");
 
 const red = "\x1b[31m";
 const plain = "\x1b[0m";
@@ -17,7 +17,7 @@ const ffmpegEscapeFilepath = (path) =>
   path.replaceAll("\\", "\\\\").replaceAll("'", "'\\''");
 
 function quit(s) {
-  console.log("" + red + s + ", quitting." + plain + "\n");
+  console.log(`${red}${s}, quitting.${plain}\n`);
   return process.exit(1);
 }
 
@@ -39,7 +39,7 @@ function toHMS(secs) {
   if (minutes > 0) str.push(`${minutes}m`);
   if (remainingSeconds > 0) str.push(`${remainingSeconds}s`);
 
-  return str.length == 0 ? "0" : str.join("");
+  return str.length === 0 ? "0" : str.join("");
 }
 
 async function transferTimestamps(inPath, outPath, offset = 0) {
@@ -69,8 +69,8 @@ async function ffmpeg(args) {
 
   const fullArgs = baseArgs.concat(args);
 
-  const cmdStr = "" + cmd + " " + fullArgs.join(" ");
-  console.log("" + purple + cmdStr + plain + "\n");
+  const cmdStr = `${cmd} ${fullArgs.join(" ")}`;
+  console.log(`${purple}${cmdStr}${plain}\n`);
 
   child_process.spawnSync(cmd, fullArgs, { stdio: "inherit" });
 }
@@ -145,7 +145,7 @@ async function main() {
   const cutsMap = JSON.parse(cutsStr);
   const cuts = Object.values(cutsMap).sort((a, b) => a.start - b.start);
 
-  const { name: filename_noext, ext: ext } = path.parse(filename);
+  const { name: filename_noext, ext } = path.parse(filename);
 
   const inpath = path.join(indir, filename);
   const outpaths = [];
@@ -153,26 +153,18 @@ async function main() {
   for (const [i, cut] of cuts.entries()) {
     if (!("end" in cut)) continue;
 
-    const duration = parseFloat(cut.end) - parseFloat(cut.start);
+    const duration = Number.parseFloat(cut.end) - Number.parseFloat(cut.start);
 
-    const cutName =
-      `(cut${cuts.length == 1 ? "" : i + 1}) ` +
-      filename_noext +
-      " (" +
-      toHMS(cut.start) +
-      " - " +
-      toHMS(cut.end) +
-      ")" +
-      ext;
+    const cutName = `(cut${
+      cuts.length === 1 ? "" : i + 1
+    }) ${filename_noext} (${toHMS(cut.start)} - ${toHMS(cut.end)})${ext}`;
 
     const outpath = path.join(outdir, cutName);
 
-    const progress = "(" + (i + 1) + "/" + cuts.length + ")";
+    const progress = `(${i + 1}/${cuts.length})`;
 
-    console.log(
-      "" + green + progress + plain + " " + inpath + " " + green + "->" + plain
-    );
-    console.log("" + outpath + "\n");
+    console.log(`${green}${progress}${plain} ${inpath} ${green}->${plain}`);
+    console.log(`${outpath}\n`);
 
     await renderCut(inpath, outpath, cut.start, duration);
     await transferTimestamps(inpath, outpath);
@@ -180,8 +172,8 @@ async function main() {
     outpaths.push(outpath);
   }
 
-  if (outpaths.length > 1 && options.multi_cut_mode == "merge") {
-    const cutName = `(${outpaths.length} merged cuts) ` + filename;
+  if (outpaths.length > 1 && options.multi_cut_mode === "merge") {
+    const cutName = `(${outpaths.length} merged cuts) ${filename}`;
     const outpath = path.join(outdir, cutName);
 
     await mergeCuts(indir, outpaths, outpath);
