@@ -116,8 +116,12 @@ async function mergeCuts(tempPath, filepaths, outpath) {
     0,
     "-i",
     mergeFile,
+    // don't re-encode
     "-c",
     "copy",
+    // copy all input streams
+    "-map",
+    "0",
     outpath,
   ]);
 
