@@ -14,12 +14,7 @@ Also credits to [suckless-cut](https://github.com/couleur-tweak-tips/suckless-cu
 
 ## requirements
 
-Besides mpv, you must have the following in your PATH:
-
-- ffmpeg
-- node
-
-(I recommend using [scoop](https://scoop.sh) to install both on Windows)
+Besides mpv, you must have `ffmpeg` in your PATH.
 
 ## installation
 
@@ -33,12 +28,11 @@ Download [the latest release](https://github.com/f0e/mpv-lossless-cut/releases/l
 
 After that, the next time you run mpv the script will be loaded.
 
-Note: mpv-lossless-cut should have its own folder inside your scripts folder. (`scripts/mpv-lossless-cut/main.lua & make_cuts.js`)
-
 ## options
 
 `script-opts/mpv-lossless-cut.conf`:
 
+- `lossless` - Whether the cut clips should be lossless. If set to yes, cuts may not be exact, as they can only occur at keyframes. Setting it to no will re-encode clips, but cut times will be exact.
 - `output_dir` - The output directory for cuts, can be relative or absolute.
   - Default value: `.` (will place cuts in the same directory as the original video)
 - `multi_cut_mode` - The mode for handling multiple cuts for a single video. Options:
@@ -67,6 +61,6 @@ Rendered cuts will be placed in the same directory as the source file.
 If the script doesn't work, you can try these steps.
 
 - Make sure all of the [requirements](#requirements) are installed
-- Make sure the script is installed in the correct directory. You should end up with something like: `C:\Users\admin\scoop\persist\mpv\portable_config\scripts\mpv-lossless-cut\main.lua & make_cuts.js`.
+- Make sure the script is installed in the correct directory. You should end up with something like: `~/.mpv/config/scripts/mpv-lossless-cut.lua`.
 - Run mpv using the terminal (`mpv video.mp4`) and check the output, are there any errors?
 - Make sure you don't have multiple versions of mpv installed. You might have installed the script to the wrong version.
