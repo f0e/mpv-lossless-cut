@@ -21,18 +21,10 @@ local function log(message)
 end
 
 local function sanitize_filename(filename)
-	-- Replace characters that are typically problematic in filenames
-	-- with underscores
 	local sanitized = filename:gsub('[\\/:*?"<>|]', "_")
 
-	-- Replace consecutive underscores with a single underscore
-	sanitized = sanitized:gsub("_+", "_")
-
-	-- Remove leading and trailing whitespace
+	-- leading and trailing whitespace
 	sanitized = sanitized:gsub("^%s*(.-)%s*$", "%1")
-
-	-- Replace remaining whitespace with underscores
-	sanitized = sanitized:gsub("%s", "_")
 
 	return sanitized
 end
@@ -64,7 +56,7 @@ local function to_hms(secs)
 	return #str == 0 and "0" or table.concat(str, "")
 end
 
--- file-related functions
+-- file operations
 local function ensure_directory_exists(dir)
 	local dir_info = mp.utils.file_info(dir)
 	if not dir_info or not dir_info.is_dir then
@@ -84,19 +76,19 @@ end
 local function delete_file(file_path)
 	local file_info = mp.utils.file_info(file_path)
 
-	-- Check if file exists
-	if file_info and not file_info.is_dir then
-		local args
-		if os_name == "windows" then
-			args = { "cmd", "/c", "del", file_path }
-		else
-			args = { "rm", file_path }
-		end
-
-		local res = mp.utils.subprocess({ args = args, cancellable = false })
-		return res.status == 0
+	if not file_info or file_info.is_dir then
+		return false
 	end
-	return false
+
+	local args
+	if os_name == "windows" then
+		args = { "cmd", "/c", "del", file_path }
+	else
+		args = { "rm", file_path }
+	end
+
+	local res = mp.utils.subprocess({ args = args, cancellable = false })
+	return res.status == 0
 end
 
 local function set_file_modified_time(file_path, mtime)
@@ -109,7 +101,6 @@ local function set_file_modified_time(file_path, mtime)
 	local result
 
 	if os_name == "windows" then
-		-- Windows implementation using PowerShell
 		result = mp.utils.subprocess({
 			args = {
 				"powershell",
@@ -123,7 +114,6 @@ local function set_file_modified_time(file_path, mtime)
 			cancellable = false,
 		})
 	else
-		-- macOS and Linux implementation using touch
 		result = mp.utils.subprocess({
 			args = {
 				"touch",
@@ -156,12 +146,11 @@ local function run_ffmpeg(args)
 		"-y",
 	}
 
-	-- Combine base args with provided args
+	-- add args to base
 	for _, arg in ipairs(args) do
 		table.insert(base_args, arg)
 	end
 
-	-- Debug output
 	local cmd_str = table.concat(base_args, " ")
 	print("Running ffmpeg command: " .. cmd_str)
 
@@ -315,7 +304,7 @@ local function cut_render()
 	if not is_stream then
 		filename_noext, ext = filename:match("^(.*)(%.[^%.]+)$")
 	else
-		filename_noext = mp.get_property("media-title")
+		filename_noext = sanitize_filename(mp.get_property("media-title"))
 		ext = ".mkv"
 
 		input = temp_cache_file_name
@@ -345,15 +334,13 @@ local function cut_render()
 			if cut.end_time then
 				local duration = cut.end_time - cut.start_time
 
-				local cut_name = sanitize_filename(
-					string.format(
-						"(%s) %s (%s - %s)%s",
-						#cuts == 1 and "cut" or "cut" .. i,
-						filename_noext,
-						to_hms(cut.start_time),
-						to_hms(cut.end_time),
-						ext
-					)
+				local cut_name = string.format(
+					"(%s) %s (%s - %s)%s",
+					#cuts == 1 and "cut" or "cut" .. i,
+					filename_noext,
+					to_hms(cut.start_time),
+					to_hms(cut.end_time),
+					ext
 				)
 
 				local cut_path = mp.utils.join_path(outdir, cut_name)
@@ -370,8 +357,7 @@ local function cut_render()
 		end
 
 		if #cut_paths > 1 and options.multi_cut_mode == "merge" then
-			local merge_name =
-				sanitize_filename(string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext))
+			local merge_name = string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext)
 
 			local merge_path = mp.utils.join_path(outdir, merge_name)
 
@@ -434,11 +420,17 @@ end
 
 -- key bindings
 mp.add_key_binding("g", "cut_set_start", function()
-	cut_set_start(mp.get_property_number("time-pos"))
+	local time = mp.get_property_number("time-pos")
+	if time ~= nil then
+		cut_set_start(time)
+	end
 end)
 
 mp.add_key_binding("h", "cut_set_end", function()
-	cut_set_end(mp.get_property_number("time-pos"))
+	local time = mp.get_property_number("time-pos")
+	if time ~= nil then
+		cut_set_end(time)
+	end
 end)
 
 mp.add_key_binding("G", "cut_set_start_sof", function()
