@@ -106,7 +106,7 @@ local function set_file_modified_time(file_path, mtime)
 				"powershell",
 				"-command",
 				string.format(
-					'(Get-Item -Path "%s").LastWriteTime = (Get-Date 01.01.1970).AddSeconds(%d)',
+					'(Get-Item -Path "%s").LastWriteTime = (Get-Date "1970-01-01 00:00:00").AddSeconds(%d).ToLocalTime()',
 					normalized_path:gsub("/", "\\"),
 					mtime
 				),
