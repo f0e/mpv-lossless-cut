@@ -203,11 +203,7 @@ local function merge_cuts(temp_dir, filepaths, outpath, input_mtime)
 	local content = ""
 
 	for _, path in ipairs(filepaths) do
-		if os_name == "windows" then
-			content = content .. string.format('file "%s"\n', path:gsub("/", "\\"))
-		else
 			content = content .. string.format("file '%s'\n", ffmpeg_escape_filepath(path))
-		end
 	end
 
 	local file = io.open(merge_file, "w")
@@ -288,7 +284,12 @@ local function cut_render()
 	local is_stream = input_info == nil
 
 	local cwd = mp.utils.getcwd()
-	local outdir = mp.utils.join_path(cwd, options.output_dir)
+	local outdir
+	if options.output_dir == "." then
+			outdir = cwd
+	else
+			outdir = mp.utils.join_path(cwd, options.output_dir)
+	end
 
 	-- create output directory if needed
 	if not ensure_directory_exists(outdir) then
