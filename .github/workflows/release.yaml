@@ -17,9 +17,19 @@ jobs:
       - name: Install zip
         run: sudo apt-get install -y zip
 
+      - name: Create directory structure
+        working-directory: ${{env.GITHUB_WORKSPACE}}
+        run: |
+          mkdir -p tmp/scripts
+          mkdir -p tmp/script-opts
+          cp mpv-lossless-cut.lua tmp/scripts/
+          cp mpv-lossless-cut.conf tmp/script-opts/
+
       - name: Create archive
         working-directory: ${{env.GITHUB_WORKSPACE}}
-        run: zip -r mpv-lossless-cut.zip scripts script-opts
+        run: |
+          cd tmp
+          zip -r ../mpv-lossless-cut.zip scripts script-opts
 
       - name: Release
         uses: softprops/action-gh-release@v1
