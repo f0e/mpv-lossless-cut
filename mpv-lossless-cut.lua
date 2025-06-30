@@ -376,8 +376,6 @@ local function cut_render()
 	if is_stream then
 		delete_file(temp_cache_file_name)
 	end
-
-	log("Done!")
 end
 
 -- cut management functions
