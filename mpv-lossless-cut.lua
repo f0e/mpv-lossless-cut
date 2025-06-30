@@ -351,6 +351,7 @@ local function cut_render()
 				local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, input_info.mtime)
 				if success then
 					table.insert(cut_paths, cut_path)
+					log(string.format("(%d/%d) Rendered cut to %s", i, #cuts, cut_path))
 				else
 					log("Failed to render cut " .. i)
 				end
