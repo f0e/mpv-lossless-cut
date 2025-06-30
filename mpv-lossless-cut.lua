@@ -289,11 +289,12 @@ local function cut_render()
 
 	local is_stream = input_info == nil
 
-	local cwd = mp.utils.getcwd()
 	local outdir
 	if options.output_dir == "." then
-		outdir = cwd
+		local input_path = mp.get_property("path")
+		outdir = mp.utils.split_path(input_path)
 	else
+		local cwd = mp.utils.getcwd()
 		outdir = mp.utils.join_path(cwd, options.output_dir)
 	end
 
