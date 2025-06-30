@@ -171,9 +171,9 @@ local function render_cut(input, outpath, start, duration, input_mtime)
 		tostring(duration),
 		"-i",
 		input,
-		-- copy video stream
+		-- copy video stream if present
 		"-map",
-		"0:v",
+		"0:v?",
 		-- copy audio stream if present
 		"-map",
 		"0:a?",
@@ -227,9 +227,12 @@ local function merge_cuts(temp_dir, filepaths, outpath, input_mtime)
 		-- don't re-encode
 		"-c",
 		"copy",
-		-- copy all input streams
+		-- copy video stream if present
 		"-map",
-		"0",
+		"0:v?",
+		-- copy audio stream if present
+		"-map",
+		"0:a?",
 		outpath,
 	})
 
