@@ -385,12 +385,17 @@ local function cut_toggle_mode()
 	log(string.format('Cut mode set to "%s"', options.multi_cut_mode))
 end
 
-local function cut_clear()
+local function cut_clear(silent)
 	if next(cuts) then
 		cuts = {}
-		log("Cuts cleared")
+
+		if not silent then
+			log("Cuts cleared")
+		end
 	else
-		log("No cuts to clear")
+		if not silent then
+			log("No cuts to clear")
+		end
 	end
 end
 
@@ -446,6 +451,8 @@ mp.add_key_binding("ctrl+h", "cut_clear", cut_clear)
 
 mp.add_key_binding("r", "cut_render", cut_render)
 
-mp.register_event("end-file", cut_clear)
+mp.register_event("end-file", function()
+	cut_clear(true)
+end)
 
 log("mpv-lossless-cut loaded")
