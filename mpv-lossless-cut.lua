@@ -171,9 +171,12 @@ local function render_cut(input, outpath, start, duration, input_mtime)
 		tostring(duration),
 		"-i",
 		input,
-		-- copy all input streams
+		-- copy video stream if present
 		"-map",
-		"0",
+		"0:v?",
+		-- copy audio stream if present
+		"-map",
+		"0:a?",
 		-- shift timestamps so they start at 0
 		"-avoid_negative_ts",
 		"make_zero",
@@ -203,7 +206,7 @@ local function merge_cuts(temp_dir, filepaths, outpath, input_mtime)
 	local content = ""
 
 	for _, path in ipairs(filepaths) do
-			content = content .. string.format("file '%s'\n", ffmpeg_escape_filepath(path))
+		content = content .. string.format("file '%s'\n", ffmpeg_escape_filepath(path))
 	end
 
 	local file = io.open(merge_file, "w")
@@ -224,9 +227,12 @@ local function merge_cuts(temp_dir, filepaths, outpath, input_mtime)
 		-- don't re-encode
 		"-c",
 		"copy",
-		-- copy all input streams
+		-- copy video stream if present
 		"-map",
-		"0",
+		"0:v?",
+		-- copy audio stream if present
+		"-map",
+		"0:a?",
 		outpath,
 	})
 
@@ -283,12 +289,13 @@ local function cut_render()
 
 	local is_stream = input_info == nil
 
-	local cwd = mp.utils.getcwd()
 	local outdir
 	if options.output_dir == "." then
-			outdir = cwd
+		local input_path = mp.get_property("path")
+		outdir = mp.utils.split_path(input_path)
 	else
-			outdir = mp.utils.join_path(cwd, options.output_dir)
+		local cwd = mp.utils.getcwd()
+		outdir = mp.utils.join_path(cwd, options.output_dir)
 	end
 
 	-- create output directory if needed
