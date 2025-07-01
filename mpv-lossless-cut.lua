@@ -455,4 +455,4 @@ mp.register_event("end-file", function()
 	cut_clear(true)
 end)
 
-log("mpv-lossless-cut loaded")
+print("mpv-lossless-cut loaded")
