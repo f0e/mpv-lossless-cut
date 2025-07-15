@@ -56,6 +56,76 @@ local function to_hms(secs)
 	return #str == 0 and "0" or table.concat(str, "")
 end
 
+function join_paths(path1, path2)
+	if not path1 or path1 == "" then
+		return path2 or ""
+	end
+	if not path2 or path2 == "" then
+		return path1
+	end
+
+	local separator
+	if os_name == "windows" then
+		separator = "\\"
+	else
+		separator = "/"
+	end
+
+	-- normalize separators in both paths
+	path1 = path1:gsub("[/\\]", separator)
+	path2 = path2:gsub("[/\\]", separator)
+
+	-- remove trailing separator from path1
+	path1 = path1:gsub(separator == "\\" and "\\+$" or "/+$", "")
+
+	-- handle absolute path2 (starts with drive letter on Windows or / on Unix)
+	if path2:match("^[A-Za-z]:") or path2:match("^" .. (separator == "\\" and "\\" or "/")) then
+		return path2
+	end
+
+	-- handle relative paths with .. and .
+	local function resolve_path(base, relative)
+		local parts = {}
+
+		-- split base path into parts
+		local pattern = separator == "\\" and "[^\\\\]+" or "[^/]+"
+		for part in base:gmatch(pattern) do
+			table.insert(parts, part)
+		end
+
+		-- process relative path parts
+		for part in relative:gmatch(pattern) do
+			if part == ".." then
+				if #parts > 0 then
+					table.remove(parts)
+				end
+			elseif part ~= "." then
+				table.insert(parts, part)
+			end
+		end
+
+		-- reconstruct path
+		local result = table.concat(parts, separator)
+
+		-- handle drive letters on Windows
+		if base:match("^[A-Za-z]:") then
+			local drive = base:match("^[A-Za-z]:")
+			if not result:match("^[A-Za-z]:") then
+				result = drive .. separator .. result
+			end
+		elseif
+			base:match("^" .. (separator == "\\" and "\\\\" or "/"))
+			and not result:match("^" .. (separator == "\\" and "\\\\" or "/"))
+		then
+			result = separator .. result
+		end
+
+		return result
+	end
+
+	return resolve_path(path1, path2)
+end
+
 -- file operations
 local function ensure_directory_exists(dir)
 	local dir_info = mp.utils.file_info(dir)
@@ -199,11 +269,11 @@ local function merge_cuts(temp_dir, filepaths, outpath, input_mtime)
 	-- i hate that you have to do a separate command and render each cut separately first, i tried using
 	-- filter_complex for merging with multiple inputs but it wouldn't let me. todo: look into this further
 
-	local merge_file = mp.utils.join_path(temp_dir, "merging.txt")
+	local merge_file = join_paths(temp_dir, "merging.txt")
 	local content = ""
 
 	for _, path in ipairs(filepaths) do
-			content = content .. string.format("file '%s'\n", ffmpeg_escape_filepath(path))
+		content = content .. string.format("file '%s'\n", ffmpeg_escape_filepath(path))
 	end
 
 	local file = io.open(merge_file, "w")
@@ -283,12 +353,12 @@ local function cut_render()
 
 	local is_stream = input_info == nil
 
-	local cwd = mp.utils.getcwd()
 	local outdir
-	if options.output_dir == "." then
-			outdir = cwd
+	if options.output_dir == "@cwd" or is_stream then
+		outdir = mp.utils.getcwd()
 	else
-			outdir = mp.utils.join_path(cwd, options.output_dir)
+		input_dir = mp.utils.split_path(input)
+		outdir = join_paths(input_dir, options.output_dir)
 	end
 
 	-- create output directory if needed
@@ -300,7 +370,7 @@ local function cut_render()
 	local filename_noext, ext = "", ""
 	local cache_offset = 0
 
-	local temp_cache_file_name = mp.utils.join_path(outdir, "cache-dump.mkv")
+	local temp_cache_file_name = join_paths(outdir, "cache-dump.mkv")
 
 	if not is_stream then
 		filename_noext, ext = filename:match("^(.*)(%.[^%.]+)$")
@@ -344,7 +414,7 @@ local function cut_render()
 					ext
 				)
 
-				local cut_path = mp.utils.join_path(outdir, cut_name)
+				local cut_path = join_paths(outdir, cut_name)
 
 				log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
 
@@ -361,7 +431,7 @@ local function cut_render()
 		if #cut_paths > 1 and options.multi_cut_mode == "merge" then
 			local merge_name = string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext)
 
-			local merge_path = mp.utils.join_path(outdir, merge_name)
+			local merge_path = join_paths(outdir, merge_name)
 
 			log("Merging cuts...")
 			local success = merge_cuts(cwd, cut_paths, merge_path, input_info.mtime)
