@@ -161,8 +161,15 @@ local function delete_file(file_path)
 	return res.status == 0
 end
 
-local function set_file_modified_time(file_path, mtime)
+local function set_file_times(file_path, mtime)
 	if not mtime then
+		mp.msg.warn("No mtime provided for: " .. file_path)
+		return false
+	end
+
+	local file_info = mp.utils.file_info(file_path)
+	if not file_info then
+		mp.msg.error("File does not exist, cannot set times: " .. file_path)
 		return false
 	end
 
@@ -176,7 +183,10 @@ local function set_file_modified_time(file_path, mtime)
 				"powershell",
 				"-command",
 				string.format(
-					'(Get-Item -Path "%s").LastWriteTime = (Get-Date "1970-01-01 00:00:00").AddSeconds(%d).ToLocalTime()',
+					'$file = Get-Item -Path "%s"; ' ..
+					'$date = (Get-Date "1970-01-01 00:00:00").AddSeconds(%d).ToLocalTime(); ' ..
+					'$file.CreationTime = $date; ' ..
+					'$file.LastWriteTime = $date',
 					normalized_path:gsub("/", "\\"),
 					mtime
 				),
@@ -196,9 +206,12 @@ local function set_file_modified_time(file_path, mtime)
 	end
 
 	success = (result.status == 0)
-
-	if not success and result.stderr then
-		mp.msg.error("Failed to set file modified time: " .. (result.stderr or "Unknown error"))
+	
+	if not success then
+		local error_msg = result.stderr or result.stdout or "Unknown error"
+		mp.msg.error("Failed to set file times for " .. file_path .. ": " .. error_msg)
+	else
+		mp.msg.verbose("Successfully set file times for: " .. file_path)
 	end
 
 	return success
@@ -259,7 +272,7 @@ local function render_cut(input, outpath, start, duration, input_mtime)
 	local success = run_ffmpeg(args)
 
 	if success and input_mtime then
-		set_file_modified_time(outpath, input_mtime)
+		set_file_times(outpath, input_mtime)
 	end
 
 	return success
@@ -303,7 +316,7 @@ local function merge_cuts(temp_dir, filepaths, outpath, input_mtime)
 	os.remove(merge_file)
 
 	if success and input_mtime then
-		set_file_modified_time(outpath, input_mtime)
+		set_file_times(outpath, input_mtime)
 	end
 
 	if success then
@@ -389,58 +402,61 @@ local function cut_render()
 		cache_offset = offset
 	end
 
-	local input_info = mp.utils.file_info(input)
+	-- get input file info and mtime - do this AFTER handling stream case
+	input_info = mp.utils.file_info(input)
 
 	if not input_info then
-		log("Failed to read input")
-	else
-		-- sort cuts by start time
-		table.sort(cuts, function(a, b)
-			return a.start_time < b.start_time
-		end)
+		log("Failed to read input file info")
+	end
 
-		local cut_paths = {}
+	-- sort cuts by start time
+	table.sort(cuts, function(a, b)
+		return a.start_time < b.start_time
+	end)
 
-		for i, cut in ipairs(cuts) do
-			if cut.end_time then
-				local duration = cut.end_time - cut.start_time
+	local cut_paths = {}
 
-				local cut_name = string.format(
-					"(%s) %s (%s - %s)%s",
-					#cuts == 1 and "cut" or "cut" .. i,
-					filename_noext,
-					to_hms(cut.start_time),
-					to_hms(cut.end_time),
-					ext
-				)
+	for i, cut in ipairs(cuts) do
+		if cut.end_time then
+			local duration = cut.end_time - cut.start_time
 
-				local cut_path = join_paths(outdir, cut_name)
+			local cut_name = string.format(
+				"(%s) %s (%s - %s)%s",
+				#cuts == 1 and "cut" or "cut" .. i,
+				filename_noext,
+				to_hms(cut.start_time),
+				to_hms(cut.end_time),
+				ext
+			)
 
-				log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
+			local cut_path = join_paths(outdir, cut_name)
 
-				local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, input_info.mtime)
-				if success then
-					table.insert(cut_paths, cut_path)
-					log(string.format("(%d/%d) Rendered cut to %s", i, #cuts, cut_path))
-				else
-					log("Failed to render cut " .. i)
-				end
+			log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
+
+			local mtime = input_info and input_info.mtime or nil
+			local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, mtime)
+			if success then
+				table.insert(cut_paths, cut_path)
+				log(string.format("(%d/%d) Rendered cut to %s", i, #cuts, cut_path))
+			else
+				log("Failed to render cut " .. i)
 			end
 		end
+	end
 
-		if #cut_paths > 1 and options.multi_cut_mode == "merge" then
-			local merge_name = string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext)
+	if #cut_paths > 1 and options.multi_cut_mode == "merge" then
+		local merge_name = string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext)
 
-			local merge_path = join_paths(outdir, merge_name)
+		local merge_path = join_paths(outdir, merge_name)
 
-			log("Merging cuts...")
-			local success = merge_cuts(cwd, cut_paths, merge_path, input_info.mtime)
+		log("Merging cuts...")
+		local mtime = input_info and input_info.mtime or nil
+		local success = merge_cuts(outdir, cut_paths, merge_path, mtime)
 
-			if success then
-				log("Successfully merged cuts")
-			else
-				log("Failed to merge cuts")
-			end
+		if success then
+			log("Successfully merged cuts")
+		else
+			log("Failed to merge cuts")
 		end
 	end
 
