@@ -183,11 +183,11 @@ local function set_file_times(file_path, mtime)
 				"powershell",
 				"-command",
 				string.format(
-					'$file = Get-Item -Path "%s"; '
+					"$file = Get-Item -LiteralPath '%s'; "
 						.. '$date = (Get-Date "1970-01-01 00:00:00").AddSeconds(%d).ToLocalTime(); '
 						.. "$file.CreationTime = $date; "
 						.. "$file.LastWriteTime = $date",
-					normalized_path:gsub("/", "\\"),
+					normalized_path:gsub("/", "\\"):gsub("'", "''"),
 					mtime
 				),
 			},
