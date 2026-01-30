@@ -57,6 +57,39 @@ local function to_hms(secs)
 	return #str == 0 and "0" or table.concat(str, "")
 end
 
+local function parse_ffmpeg_args(args_string)
+	local args = {}
+	local in_quote = false
+	local quote_char = nil
+	local current_arg = ""
+	
+	for i = 1, #args_string do
+		local char = args_string:sub(i, i)
+		
+		if (char == '"' or char == "'") and not in_quote then
+			in_quote = true
+			quote_char = char
+		elseif char == quote_char and in_quote then
+			in_quote = false
+			quote_char = nil
+		elseif char:match("%s") and not in_quote then
+			if current_arg ~= "" then
+				table.insert(args, current_arg)
+				current_arg = ""
+			end
+		else
+			current_arg = current_arg .. char
+		end
+	end
+	
+	-- add the last argument
+	if current_arg ~= "" then
+		table.insert(args, current_arg)
+	end
+	
+	return args
+end
+
 function join_paths(path1, path2)
 	if not path1 or path1 == "" then
 		return path2 or ""
@@ -160,49 +193,6 @@ local function delete_file(file_path)
 
 	local res = mp.utils.subprocess({ args = args, cancellable = false })
 	return res.status == 0
-end
-
-local function copy_to_clipboard(file_path)
-	local args
-	if os_name == "windows" then
-		-- Windows: Copy file path to clipboard
-		args = {
-			"powershell",
-			"-command",
-			string.format('Set-Clipboard -Path "%s"', file_path:gsub("/", "\\")),
-		}
-	elseif os_name == "mac" then
-		-- macOS: Copy file to clipboard
-		args = { "osascript", "-e", string.format('set the clipboard to POSIX file "%s"', file_path) }
-	else
-		-- Linux: Try xclip or wl-copy
-		local xclip_check = mp.utils.subprocess({ args = { "which", "xclip" }, cancellable = false })
-		local wl_copy_check = mp.utils.subprocess({ args = { "which", "wl-copy" }, cancellable = false })
-
-		if xclip_check.status == 0 then
-			args = { "xclip", "-selection", "clipboard", "-t", "text/uri-list", "-i" }
-			-- Need to pipe the file URI
-			local uri = "file://" .. file_path
-			local result = mp.utils.subprocess({
-				args = args,
-				stdin = uri,
-				cancellable = false,
-			})
-			return result.status == 0
-		elseif wl_copy_check.status == 0 then
-			args = { "wl-copy", file_path }
-		else
-			log("No clipboard utility found (xclip or wl-copy)")
-			return false
-		end
-	end
-
-	if args then
-		local result = mp.utils.subprocess({ args = args, cancellable = false })
-		return result.status == 0
-	end
-
-	return false
 end
 
 local function set_file_times(file_path, mtime)
@@ -310,7 +300,8 @@ local function render_cut(input, outpath, start, duration, input_mtime, use_loss
 		table.insert(args, "-c")
 		table.insert(args, "copy")
 	else
-		for arg in options.lossy_ffmpeg_args:gmatch("%S+") do
+		local parsed_args = parse_ffmpeg_args(options.lossy_ffmpeg_args)
+		for _, arg in ipairs(parsed_args) do
 			table.insert(args, arg)
 		end
 	end
@@ -521,7 +512,7 @@ local function cut_render(use_lossless, copy_clipboard)
 	end
 
 	if copy_clipboard and final_output then
-		if copy_to_clipboard(final_output) then
+		if mp.set_property('clipboard/text', final_output) then
 			log("Copied to clipboard: " .. final_output)
 		else
 			log("Failed to copy to clipboard")
