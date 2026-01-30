@@ -3,9 +3,10 @@ mp.utils = require("mp.utils")
 mp.options = require("mp.options")
 
 local options = {
-	lossless = true,
 	output_dir = ".",
 	multi_cut_mode = "separate",
+	lossless = true,
+	lossy_ffmpeg_args = "-c:v libx264 -crf 18 -preset fast -c:a aac -b:a 192k",
 }
 
 mp.options.read_options(options, "mpv-lossless-cut")
@@ -161,6 +162,49 @@ local function delete_file(file_path)
 	return res.status == 0
 end
 
+local function copy_to_clipboard(file_path)
+	local args
+	if os_name == "windows" then
+		-- Windows: Copy file path to clipboard
+		args = {
+			"powershell",
+			"-command",
+			string.format('Set-Clipboard -Path "%s"', file_path:gsub("/", "\\")),
+		}
+	elseif os_name == "mac" then
+		-- macOS: Copy file to clipboard
+		args = { "osascript", "-e", string.format('set the clipboard to POSIX file "%s"', file_path) }
+	else
+		-- Linux: Try xclip or wl-copy
+		local xclip_check = mp.utils.subprocess({ args = { "which", "xclip" }, cancellable = false })
+		local wl_copy_check = mp.utils.subprocess({ args = { "which", "wl-copy" }, cancellable = false })
+
+		if xclip_check.status == 0 then
+			args = { "xclip", "-selection", "clipboard", "-t", "text/uri-list", "-i" }
+			-- Need to pipe the file URI
+			local uri = "file://" .. file_path
+			local result = mp.utils.subprocess({
+				args = args,
+				stdin = uri,
+				cancellable = false,
+			})
+			return result.status == 0
+		elseif wl_copy_check.status == 0 then
+			args = { "wl-copy", file_path }
+		else
+			log("No clipboard utility found (xclip or wl-copy)")
+			return false
+		end
+	end
+
+	if args then
+		local result = mp.utils.subprocess({ args = args, cancellable = false })
+		return result.status == 0
+	end
+
+	return false
+end
+
 local function set_file_times(file_path, mtime)
 	if not mtime then
 		mp.msg.warn("No mtime provided for: " .. file_path)
@@ -245,7 +289,7 @@ local function run_ffmpeg(args)
 	return result.status == 0, result.stdout, result.stderr
 end
 
-local function render_cut(input, outpath, start, duration, input_mtime)
+local function render_cut(input, outpath, start, duration, input_mtime, use_lossless)
 	local args = {
 		-- seek to start before loading file (faster) https://trac.ffmpeg.org/wiki/Seeking#Inputseeking
 		"-ss",
@@ -262,9 +306,13 @@ local function render_cut(input, outpath, start, duration, input_mtime)
 		"make_zero",
 	}
 
-	if options.lossless then
+	if use_lossless then
 		table.insert(args, "-c")
 		table.insert(args, "copy")
+	else
+		for arg in options.lossy_ffmpeg_args:gmatch("%S+") do
+			table.insert(args, arg)
+		end
 	end
 
 	table.insert(args, outpath)
@@ -351,7 +399,7 @@ local function dump_cache(outpath)
 	return cache_start
 end
 
-local function cut_render()
+local function cut_render(use_lossless, copy_clipboard)
 	if #cuts == 0 or not cuts[#cuts].end_time then
 		log("No complete cuts to render")
 		return
@@ -367,7 +415,15 @@ local function cut_render()
 	local is_stream = input_info == nil
 
 	local outdir
-	if options.output_dir == "@cwd" or is_stream then
+	if copy_clipboard then
+		if os_name == "windows" then
+			outdir = os.getenv("TEMP") or os.getenv("TMP") or "C:\\Windows\\Temp"
+		else
+			outdir = os.getenv("TMPDIR") or "/tmp"
+		end
+
+		outdir = join_paths(outdir, "mpv-lossless-cut")
+	elseif options.output_dir == "@cwd" or is_stream then
 		outdir = mp.utils.getcwd()
 	else
 		input_dir = mp.utils.split_path(input)
@@ -433,7 +489,7 @@ local function cut_render()
 			log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
 
 			local mtime = input_info and input_info.mtime or nil
-			local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, mtime)
+			local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, mtime, use_lossless)
 			if success then
 				table.insert(cut_paths, cut_path)
 				log(string.format("(%d/%d) Rendered cut to %s", i, #cuts, cut_path))
@@ -442,6 +498,8 @@ local function cut_render()
 			end
 		end
 	end
+
+	local final_output = nil
 
 	if #cut_paths > 1 and options.multi_cut_mode == "merge" then
 		local merge_name = string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext)
@@ -454,8 +512,19 @@ local function cut_render()
 
 		if success then
 			log("Successfully merged cuts")
+			final_output = merge_path
 		else
 			log("Failed to merge cuts")
+		end
+	elseif #cut_paths == 1 then
+		final_output = cut_paths[1]
+	end
+
+	if copy_clipboard and final_output then
+		if copy_to_clipboard(final_output) then
+			log("Copied to clipboard: " .. final_output)
+		else
+			log("Failed to copy to clipboard")
 		end
 	end
 
@@ -534,7 +603,12 @@ end)
 mp.add_key_binding("ctrl+g", "cut_toggle_mode", cut_toggle_mode)
 mp.add_key_binding("ctrl+h", "cut_clear", cut_clear)
 
-mp.add_key_binding("r", "cut_render", cut_render)
+mp.add_key_binding("r", "cut_render", function()
+	cut_render(options.lossless, false)
+end)
+mp.add_key_binding("ctrl+r", "cut_render_clipboard", function()
+	cut_render(false, true)
+end)
 
 mp.register_event("end-file", function()
 	cut_clear(true)
