@@ -31,7 +31,7 @@ end
 
 local function ffmpeg_escape_filepath(path)
 	if os_name == "windows" then
-		return path:gsub("/", "\\"):gsub("\\", "\\\\"):gsub('"', '\\"')
+		return path:gsub("/", "\\"):gsub("\\", "\\\\"):gsub("'", "'\\''")
 	else
 		return path:gsub("\\", "/"):gsub("'", "'\\''")
 	end
