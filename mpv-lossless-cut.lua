@@ -3,16 +3,30 @@ mp.utils = require("mp.utils")
 mp.options = require("mp.options")
 
 local options = {
-	lossless = true,
 	output_dir = ".",
 	multi_cut_mode = "separate",
+	lossless = true,
+	lossy_ffmpeg_args = "-c:v libx264 -crf 18 -preset fast -c:a aac -b:a 192k",
 }
 
 mp.options.read_options(options, "mpv-lossless-cut")
 
+-- https://github.com/CogentRedTester/mpv-clipboard/blob/master/clipboard.lua
+local function detect_platform()
+	local o = {}
+	if mp.get_property_native("options/vo-mmcss-profile", o) ~= o then
+		return "windows"
+	elseif mp.get_property_native("options/macos-force-dedicated-gpu", o) ~= o then
+		return "macos"
+	elseif os.getenv("WAYLAND_DISPLAY") then
+		return "wayland"
+	end
+	return "x11"
+end
+
+local platform = detect_platform()
+
 local cuts = {}
-local os_name = package.config:sub(1, 1) == "\\" and "windows"
-	or (io.popen("uname"):read("*a"):match("Darwin") and "mac" or "linux")
 
 -- utility functions
 local function log(message)
@@ -56,6 +70,39 @@ local function to_hms(secs)
 	return #str == 0 and "0" or table.concat(str, "")
 end
 
+local function parse_ffmpeg_args(args_string)
+	local args = {}
+	local in_quote = false
+	local quote_char = nil
+	local current_arg = ""
+
+	for i = 1, #args_string do
+		local char = args_string:sub(i, i)
+
+		if (char == '"' or char == "'") and not in_quote then
+			in_quote = true
+			quote_char = char
+		elseif char == quote_char and in_quote then
+			in_quote = false
+			quote_char = nil
+		elseif char:match("%s") and not in_quote then
+			if current_arg ~= "" then
+				table.insert(args, current_arg)
+				current_arg = ""
+			end
+		else
+			current_arg = current_arg .. char
+		end
+	end
+
+	-- add the last argument
+	if current_arg ~= "" then
+		table.insert(args, current_arg)
+	end
+
+	return args
+end
+
 function join_paths(path1, path2)
 	if not path1 or path1 == "" then
 		return path2 or ""
@@ -65,7 +112,7 @@ function join_paths(path1, path2)
 	end
 
 	local separator
-	if os_name == "windows" then
+	if platform == "windows" then
 		separator = "\\"
 	else
 		separator = "/"
@@ -126,12 +173,63 @@ function join_paths(path1, path2)
 	return resolve_path(path1, path2)
 end
 
+local function command_exists(cmd)
+	local pipe = io.popen("type " .. cmd .. ' > /dev/null 2> /dev/null; printf "$?"', "r")
+	exists = pipe:read() == "0"
+	pipe:close()
+	return exists
+end
+
+local function copy_path_to_clipboard(file_path)
+	local result, args
+
+	if platform == "windows" then
+		result = mp.utils.subprocess({
+			args = {
+				"powershell",
+				"-command",
+				string.format("Set-Clipboard -LiteralPath '%s'", file_path:gsub("'", "''")),
+			},
+			cancellable = false,
+		})
+	elseif platform == "macos" then
+		result = mp.utils.subprocess({
+			args = {
+				"osascript",
+				"-e",
+				string.format('set the clipboard to POSIX file "%s"', file_path),
+			},
+			cancellable = false,
+		})
+	else
+		local uri = "file://" .. file_path
+
+		if command_exists("xclip") then
+			result = mp.utils.subprocess({
+				args = { "xclip", "-selection", "clipboard", "-t", "text/uri-list" },
+				stdin = uri,
+				cancellable = false,
+			})
+		elseif command_exists("wl-copy") then
+			result = mp.utils.subprocess({
+				args = { "wl-copy", "--type", "text/uri-list" },
+				stdin = uri,
+				cancellable = false,
+			})
+		else
+			log("No clipboard utility found (xclip or wl-copy)")
+		end
+	end
+
+	return result and result.status == 0
+end
+
 -- file operations
 local function ensure_directory_exists(dir)
 	local dir_info = mp.utils.file_info(dir)
 	if not dir_info or not dir_info.is_dir then
 		local args
-		if os_name == "windows" then
+		if platform == "windows" then
 			args = { "cmd", "/c", "mkdir", dir }
 		else
 			args = { "mkdir", "-p", dir }
@@ -151,7 +249,7 @@ local function delete_file(file_path)
 	end
 
 	local args
-	if os_name == "windows" then
+	if platform == "windows" then
 		args = { "cmd", "/c", "del", file_path }
 	else
 		args = { "rm", file_path }
@@ -173,11 +271,10 @@ local function set_file_times(file_path, mtime)
 		return false
 	end
 
-	local normalized_path = file_path:gsub([[\]], "/")
 	local success = false
 	local result
 
-	if os_name == "windows" then
+	if platform == "windows" then
 		result = mp.utils.subprocess({
 			args = {
 				"powershell",
@@ -187,7 +284,7 @@ local function set_file_times(file_path, mtime)
 						.. '$date = (Get-Date "1970-01-01 00:00:00").AddSeconds(%d).ToLocalTime(); '
 						.. "$file.CreationTime = $date; "
 						.. "$file.LastWriteTime = $date",
-					normalized_path:gsub("/", "\\"):gsub("'", "''"),
+					file_path:gsub("'", "''"),
 					mtime
 				),
 			},
@@ -199,7 +296,7 @@ local function set_file_times(file_path, mtime)
 				"touch",
 				"-t",
 				os.date("!%Y%m%d%H%M.%S", mtime),
-				normalized_path,
+				file_path,
 			},
 			cancellable = false,
 		})
@@ -245,7 +342,7 @@ local function run_ffmpeg(args)
 	return result.status == 0, result.stdout, result.stderr
 end
 
-local function render_cut(input, outpath, start, duration, input_mtime)
+local function render_cut(input, outpath, start, duration, input_mtime, use_lossless)
 	local args = {
 		-- seek to start before loading file (faster) https://trac.ffmpeg.org/wiki/Seeking#Inputseeking
 		"-ss",
@@ -262,9 +359,14 @@ local function render_cut(input, outpath, start, duration, input_mtime)
 		"make_zero",
 	}
 
-	if options.lossless then
+	if use_lossless then
 		table.insert(args, "-c")
 		table.insert(args, "copy")
+	else
+		local parsed_args = parse_ffmpeg_args(options.lossy_ffmpeg_args)
+		for _, arg in ipairs(parsed_args) do
+			table.insert(args, arg)
+		end
 	end
 
 	table.insert(args, outpath)
@@ -351,7 +453,7 @@ local function dump_cache(outpath)
 	return cache_start
 end
 
-local function cut_render()
+local function cut_render(use_lossless, copy_clipboard)
 	if #cuts == 0 or not cuts[#cuts].end_time then
 		log("No complete cuts to render")
 		return
@@ -367,7 +469,15 @@ local function cut_render()
 	local is_stream = input_info == nil
 
 	local outdir
-	if options.output_dir == "@cwd" or is_stream then
+	if copy_clipboard then
+		if platform == "windows" then
+			outdir = os.getenv("TEMP") or os.getenv("TMP") or "C:\\Windows\\Temp"
+		else
+			outdir = os.getenv("TMPDIR") or "/tmp"
+		end
+
+		outdir = join_paths(outdir, "mpv-lossless-cut")
+	elseif options.output_dir == "@cwd" or is_stream then
 		outdir = mp.utils.getcwd()
 	else
 		input_dir = mp.utils.split_path(input)
@@ -433,7 +543,7 @@ local function cut_render()
 			log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
 
 			local mtime = input_info and input_info.mtime or nil
-			local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, mtime)
+			local success = render_cut(input, cut_path, cut.start_time - cache_offset, duration, mtime, use_lossless)
 			if success then
 				table.insert(cut_paths, cut_path)
 				log(string.format("(%d/%d) Rendered cut to %s", i, #cuts, cut_path))
@@ -442,6 +552,8 @@ local function cut_render()
 			end
 		end
 	end
+
+	local final_output = nil
 
 	if #cut_paths > 1 and options.multi_cut_mode == "merge" then
 		local merge_name = string.format("(%d merged cuts) %s%s", #cut_paths, filename_noext, ext)
@@ -454,8 +566,19 @@ local function cut_render()
 
 		if success then
 			log("Successfully merged cuts")
+			final_output = merge_path
 		else
 			log("Failed to merge cuts")
+		end
+	elseif #cut_paths == 1 then
+		final_output = cut_paths[1]
+	end
+
+	if copy_clipboard and final_output then
+		if copy_path_to_clipboard(final_output) then
+			log("Copied to clipboard: " .. final_output)
+		else
+			log("Failed to copy to clipboard")
 		end
 	end
 
@@ -534,7 +657,12 @@ end)
 mp.add_key_binding("ctrl+g", "cut_toggle_mode", cut_toggle_mode)
 mp.add_key_binding("ctrl+h", "cut_clear", cut_clear)
 
-mp.add_key_binding("r", "cut_render", cut_render)
+mp.add_key_binding("r", "cut_render", function()
+	cut_render(options.lossless, false)
+end)
+mp.add_key_binding("ctrl+r", "cut_render_clipboard", function()
+	cut_render(false, true)
+end)
 
 mp.register_event("end-file", function()
 	cut_clear(true)
