@@ -17,7 +17,7 @@ local options = {
 	key_cut_seek_end      = "alt+h",
 	key_cut_toggle_mode   = "ctrl+g",
 	key_cut_clear         = "ctrl+h",
-	key_cut_render        = "r",
+	key_cut_render        = "c",
 	key_log_cut_time      = "C",
 	-- stylua: ignore end
 }
@@ -51,23 +51,24 @@ local function ffmpeg_escape_filepath(path)
 	end
 end
 
-local function to_hms(secs)
-	local hours = math.floor(secs / 3600)
-	local minutes = math.floor((secs % 3600) / 60)
-	local remaining_seconds = ((secs % 3600) % 60)
+local function to_hms(secs, is_short)
+	if secs == nil then
+		return is_short and "-" or "--"
+	end
+	local h = math.floor(secs / 3600)
+	local m = math.floor((secs % 3600) / 60)
+	local s = ((secs % 3600) % 60)
 
-	local str = {}
-	if hours > 0 then
-		table.insert(str, hours .. "h")
+	local format_str = "%d:%02d:%05.2f"
+	if is_short then
+		format_str = "%d%02d%05.2f"
 	end
-	if minutes > 0 then
-		table.insert(str, minutes .. "m")
+	local duration = mp.get_property_number("duration")
+	if duration and duration < 3600 then
+		format_str = format_str:gsub("%%d:?", "", 1)
+		return string.format(format_str, m, s)
 	end
-	if remaining_seconds > 0 then
-		table.insert(str, string.format("%.1fs", remaining_seconds))
-	end
-
-	return #str == 0 and "0" or table.concat(str, "")
+	return string.format(format_str, h, m, s)
 end
 
 local function join_paths(path1, path2)
@@ -364,6 +365,18 @@ local function dump_cache(outpath)
 	return cache_start
 end
 
+-- stylua: ignore start
+local function get_cut_name(filename_noext, ext, cut)
+	return string.format(
+		"%s--%s_%s%s",
+		filename_noext,
+		to_hms(cut.start_time, true),
+		to_hms(cut.end_time,   true),
+		ext
+	)
+end
+-- stylua: ignore end
+
 local function cut_render()
 	if #cuts == 0 or not cuts[#cuts].end_time then
 		log("No complete cuts to render")
@@ -438,16 +451,7 @@ local function cut_render()
 	for i, cut in ipairs(cuts) do
 		if cut.end_time then
 			local duration = cut.end_time - cut.start_time
-
-			local cut_name = string.format(
-				"(%s) %s (%s - %s)%s",
-				#cuts == 1 and "cut" or "cut" .. i,
-				filename_noext,
-				to_hms(cut.start_time),
-				to_hms(cut.end_time),
-				ext
-			)
-
+			local cut_name = get_cut_name(filename_noext, ext, cut)
 			local cut_path = join_paths(outdir, cut_name)
 
 			log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
@@ -513,30 +517,27 @@ local function log_cut_time()
 	log(s)
 end
 
-local function cut_set_start(start_time)
-	start_time = start_time ~= nil and start_time or mp.get_property_number("time-pos")
+local function cut_set_start(time)
+	local start_time = time ~= nil and time or mp.get_property_number("time-pos")
 	local last_cut = cuts[#cuts]
-	if not last_cut or last_cut.end_time then
-		local new_cut = { start_time = start_time }
-		table.insert(cuts, new_cut)
-		log(string.format("[cut %d] Set start time: %.2fs", #cuts, start_time))
-	else
-		last_cut.start_time = start_time
-		log(string.format("[cut %d] Updated start time: %.2fs", #cuts, start_time))
+	-- new cut only if a) no previous cut or b) after last cut
+	if not last_cut or last_cut.end_time and last_cut.end_time < start_time then
+		last_cut = {}
+		table.insert(cuts, last_cut)
 	end
+	last_cut.start_time = start_time
+	log_cut_time()
 end
 
-local function cut_set_end(end_time)
-	end_time = end_time ~= nil and end_time or mp.get_property_number("time-pos")
+local function cut_set_end(time)
+	local end_time = time ~= nil and time or mp.get_property_number("time-pos")
+	local last_cut = cuts[#cuts]
 	if #cuts == 0 then
-		log("No start point found")
-		return
+		last_cut = { start_time = 0 }
+		table.insert(cuts, last_cut)
 	end
-
-	local had_end_time = cuts[#cuts].end_time ~= nil
-
-	cuts[#cuts].end_time = end_time
-	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "Updated" or "Set", end_time))
+	last_cut.end_time = end_time
+	log_cut_time()
 end
 
 local function cut_set_start_sof()
