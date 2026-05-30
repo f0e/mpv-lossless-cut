@@ -37,23 +37,24 @@ local function ffmpeg_escape_filepath(path)
 	end
 end
 
-local function to_hms(secs)
-	local hours = math.floor(secs / 3600)
-	local minutes = math.floor((secs % 3600) / 60)
-	local remaining_seconds = ((secs % 3600) % 60)
+local function to_hms(secs, is_short)
+	if secs == nil then
+		return is_short and "-" or "--"
+	end
+	local h = math.floor(secs / 3600)
+	local m = math.floor((secs % 3600) / 60)
+	local s = ((secs % 3600) % 60)
 
-	local str = {}
-	if hours > 0 then
-		table.insert(str, hours .. "h")
+	local format_str = "%d:%02d:%05.2f"
+	if is_short then
+		format_str = "%d%02d%05.2f"
 	end
-	if minutes > 0 then
-		table.insert(str, minutes .. "m")
+	local duration = mp.get_property_number("duration")
+	if duration and duration < 3600 then
+		format_str = format_str:gsub("%%d:?", "", 1)
+		return string.format(format_str, m, s)
 	end
-	if remaining_seconds > 0 then
-		table.insert(str, string.format("%.1fs", remaining_seconds))
-	end
-
-	return #str == 0 and "0" or table.concat(str, "")
+	return string.format(format_str, h, m, s)
 end
 
 function join_paths(path1, path2)
@@ -351,6 +352,16 @@ local function dump_cache(outpath)
 	return cache_start
 end
 
+local function get_cut_name(filename_noext, ext, cut)
+	return string.format(
+		"%s--%s_%s%s",
+		filename_noext,
+		to_hms(cut.start_time, true),
+		to_hms(cut.end_time,   true),
+		ext
+	)
+end
+
 local function cut_render()
 	if #cuts == 0 or not cuts[#cuts].end_time then
 		log("No complete cuts to render")
@@ -418,16 +429,7 @@ local function cut_render()
 	for i, cut in ipairs(cuts) do
 		if cut.end_time then
 			local duration = cut.end_time - cut.start_time
-
-			local cut_name = string.format(
-				"(%s) %s (%s - %s)%s",
-				#cuts == 1 and "cut" or "cut" .. i,
-				filename_noext,
-				to_hms(cut.start_time),
-				to_hms(cut.end_time),
-				ext
-			)
-
+			local cut_name = get_cut_name(filename_noext, ext, cut)
 			local cut_path = join_paths(outdir, cut_name)
 
 			log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
@@ -477,64 +479,79 @@ local function cut_clear(silent)
 		if not silent then
 			log("Cuts cleared")
 		end
-	else
-		if not silent then
-			log("No cuts to clear")
+	elseif not silent then
+		log("No cuts to clear")
+	end
+end
+
+local function log_cut_time()
+	local s = ""
+	for i, cut in ipairs(cuts) do
+		if s ~= "" then
+			s = s .. "\n"
 		end
+		s = s .. string.format("[cut %d]: %s .. %s", i, to_hms(cut.start_time), to_hms(cut.end_time))
 	end
+	log(s)
 end
 
-local function cut_set_start(start_time)
+local function cut_set_start(time)
+	local start_time = time ~= nil and time or mp.get_property_number("time-pos")
 	local last_cut = cuts[#cuts]
-	if not last_cut or last_cut.end_time then
-		local new_cut = { start_time = start_time }
-		table.insert(cuts, new_cut)
-		log(string.format("[cut %d] Set start time: %.2fs", #cuts, start_time))
-	else
-		last_cut.start_time = start_time
-		log(string.format("[cut %d] Updated start time: %.2fs", #cuts, start_time))
+	-- new cut only if a) no previous cut or b) after last cut
+	if not last_cut or last_cut.end_time and last_cut.end_time < start_time then
+		last_cut = {}
+		table.insert(cuts, last_cut)
+	end
+	last_cut.start_time = start_time
+	log_cut_time()
+end
+
+local function cut_set_start_sof()
+	cut_set_start(0)
+end
+
+local function cut_set_end(time)
+	local end_time = time ~= nil and time or mp.get_property_number("time-pos")
+	local last_cut = cuts[#cuts]
+	if #cuts == 0 then
+		last_cut = { start_time = 0 }
+		table.insert(cuts, last_cut)
+	end
+	last_cut.end_time = end_time
+	log_cut_time()
+end
+
+local function cut_set_end_eof()
+	cut_set_end(mp.get_property_number("duration"))
+end
+
+local function cut_seek(time)
+	if time then
+		mp.set_property("time-pos", time)
 	end
 end
 
-local function cut_set_end(end_time)
-	if #cuts == 0 then
-		log("No start point found")
-		return
-	end
+local function cut_seek_start()
+	cut_seek(cuts[#cuts] and cuts[#cuts].start_time)
+end
 
-	local had_end_time = cuts[#cuts].end_time ~= nil
-
-	cuts[#cuts].end_time = end_time
-	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "updated" or "set", end_time))
+local function cut_seek_end()
+	cut_seek(cuts[#cuts] and cuts[#cuts].end_time)
 end
 
 -- key bindings
-mp.add_key_binding("g", "cut_set_start", function()
-	local time = mp.get_property_number("time-pos")
-	if time ~= nil then
-		cut_set_start(time)
-	end
-end)
 
-mp.add_key_binding("h", "cut_set_end", function()
-	local time = mp.get_property_number("time-pos")
-	if time ~= nil then
-		cut_set_end(time)
-	end
-end)
-
-mp.add_key_binding("G", "cut_set_start_sof", function()
-	cut_set_start(0)
-end)
-
-mp.add_key_binding("H", "cut_set_end_eof", function()
-	cut_set_end(mp.get_property_number("duration"))
-end)
-
-mp.add_key_binding("ctrl+g", "cut_toggle_mode", cut_toggle_mode)
-mp.add_key_binding("ctrl+h", "cut_clear", cut_clear)
-
-mp.add_key_binding("r", "cut_render", cut_render)
+mp.add_key_binding("g",      "cut_set_start",     cut_set_start)
+mp.add_key_binding("h",      "cut_set_end",       cut_set_end)
+mp.add_key_binding("G",      "cut_set_start_sof", cut_set_start_sof)
+mp.add_key_binding("H",      "cut_set_end_eof",   cut_set_end_eof)
+mp.add_key_binding("alt+g",  "cut_seek_start",    cut_seek_start)
+mp.add_key_binding("alt+h",  "cut_seek_end",      cut_seek_end)
+mp.add_key_binding("ctrl+g", "cut_toggle_mode",   cut_toggle_mode)
+mp.add_key_binding("ctrl+h", "cut_clear",         cut_clear)
+mp.add_key_binding("c",      "cut_render",        cut_render)
+mp.add_key_binding("C",      "log_cut_time",      log_cut_time)
 
 mp.register_event("end-file", function()
 	cut_clear(true)
