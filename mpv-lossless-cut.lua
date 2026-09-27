@@ -6,6 +6,7 @@ local options = {
 	lossless = true,
 	output_dir = ".",
 	multi_cut_mode = "separate",
+	ffmpeg_path = "ffmpeg",
 }
 
 mp.options.read_options(options, "mpv-lossless-cut")
@@ -220,7 +221,7 @@ end
 -- ffmpeg operations
 local function run_ffmpeg(args)
 	local base_args = {
-		"ffmpeg",
+		options.ffmpeg_path,
 		-- hide output
 		"-nostdin",
 		"-loglevel",
