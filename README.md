@@ -14,7 +14,7 @@ Also credits to [suckless-cut](https://github.com/couleur-tweak-tips/suckless-cu
 
 ## requirements
 
-Besides mpv, you must have `ffmpeg` in your PATH.
+Besides mpv, you need `ffmpeg` installed, either in your PATH or set via the [`ffmpeg_path`](#options) option.
 
 ## installation
 
@@ -38,6 +38,8 @@ After that, the next time you run mpv the script will be loaded.
 - `multi_cut_mode` - The mode for handling multiple cuts for a single video. Options:
   - `separate`: create separate cut files (default)
   - `merge`: merge cut files into a single cut.
+- `ffmpeg_path` - The path to the ffmpeg executable.
+  - Default value: `ffmpeg` (will find ffmpeg in your PATH)
 
 ## usage
 
