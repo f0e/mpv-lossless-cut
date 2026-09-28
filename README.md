@@ -14,7 +14,7 @@ Also credits to [suckless-cut](https://github.com/couleur-tweak-tips/suckless-cu
 
 ## requirements
 
-Besides mpv, you must have `ffmpeg` in your PATH, or set the `ffmpeg_path` option.
+Besides mpv, you need `ffmpeg` installed, either in your PATH or set via the [`ffmpeg_path`](#options) option.
 
 ## installation
 
