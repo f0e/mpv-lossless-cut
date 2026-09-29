@@ -175,7 +175,6 @@ local function set_file_times(file_path, mtime)
 	end
 
 	local normalized_path = file_path:gsub([[\]], "/")
-	local success = false
 	local result
 
 	if os_name == "windows" then
@@ -206,7 +205,7 @@ local function set_file_times(file_path, mtime)
 		})
 	end
 
-	success = (result.status == 0)
+	local success = (result.status == 0)
 
 	if not success then
 		local error_msg = result.stderr or result.stdout or "Unknown error"
@@ -384,7 +383,7 @@ local function cut_render()
 		return
 	end
 
-	local filename_noext, ext = "", ""
+	local filename_noext, ext
 	local cache_offset = 0
 
 	local temp_cache_file_name = join_paths(outdir, "cache-dump.mkv")
