@@ -391,6 +391,10 @@ local function cut_render()
 
 	if not is_stream then
 		filename_noext, ext = filename:match("^(.*)(%.[^%.]+)$")
+		if not filename_noext then
+			-- default to mkv if no extension, cause ffmpeg needs one
+			filename_noext, ext = filename, ".mkv"
+		end
 	else
 		filename_noext = sanitize_filename(mp.get_property("media-title"))
 		ext = ".mkv"
