@@ -33,7 +33,7 @@ After that, the next time you run mpv the script will be loaded.
 `script-opts/mpv-lossless-cut.conf`:
 
 - `lossless` - Whether the cut clips should be lossless. If set to yes, cuts may not be exact, as they can only occur at keyframes. Setting it to no will re-encode clips, but cut times will be exact.
-- `output_dir` - The output directory for cuts, can be relative or absolute.
+- `output_dir` - The output directory for cuts, can be relative or absolute. For streamed videos (e.g. playing from a URL), relative paths are relative to mpv's working directory.
   - Default value: `.` (will place cuts in the same directory as the original video)
 - `multi_cut_mode` - The mode for handling multiple cuts for a single video. Options:
   - `separate`: create separate cut files (default)

@@ -368,8 +368,11 @@ local function cut_render()
 	local is_stream = input_info == nil
 
 	local outdir
-	if options.output_dir == "@cwd" or is_stream then
+	if options.output_dir == "@cwd" then
 		outdir = mp.utils.getcwd()
+	elseif is_stream then
+		-- no source directory, so relative paths are relative to the working directory
+		outdir = join_paths(mp.utils.getcwd(), options.output_dir)
 	else
 		input_dir = mp.utils.split_path(input)
 		outdir = join_paths(input_dir, options.output_dir)
