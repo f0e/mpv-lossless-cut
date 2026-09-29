@@ -67,3 +67,14 @@ If the script doesn't work, you can try these steps.
 - Make sure the script is installed in the correct directory. You should end up with something like: `~/.config/mpv/scripts/mpv-lossless-cut.lua`.
 - Run mpv using the terminal (`mpv video.mp4`) and check the output, are there any errors?
 - Make sure you don't have multiple versions of mpv installed. You might have installed the script to the wrong version.
+
+## development
+
+[mise](https://mise.jdx.dev) is used for tool/task management, and checks are configured & run with [hk](https://hk.jdx.dev).
+
+```sh
+mise install   # install dev dependencies
+mise run setup # [optional] set up a pre-commit hook to run checks
+mise run check # run checks
+mise run fix   # autofix issues
+```
