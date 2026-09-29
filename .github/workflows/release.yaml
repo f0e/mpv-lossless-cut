@@ -5,35 +5,27 @@ on:
     tags:
       - "*"
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Install zip
-        run: sudo apt-get install -y zip
-
-      - name: Create directory structure
-        working-directory: ${{env.GITHUB_WORKSPACE}}
-        run: |
-          mkdir -p tmp/scripts
-          mkdir -p tmp/script-opts
-          cp mpv-lossless-cut.lua tmp/scripts/
-          cp mpv-lossless-cut.conf tmp/script-opts/
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Create archive
-        working-directory: ${{env.GITHUB_WORKSPACE}}
         run: |
+          mkdir -p tmp/scripts tmp/script-opts
+          cp mpv-lossless-cut.lua tmp/scripts/
+          cp mpv-lossless-cut.conf tmp/script-opts/
           cd tmp
           zip -r ../mpv-lossless-cut.zip scripts script-opts
 
       - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            mpv-lossless-cut.zip
-          fail_on_unmatched_files: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" mpv-lossless-cut.zip --verify-tag --generate-notes
