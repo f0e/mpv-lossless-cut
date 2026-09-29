@@ -57,7 +57,7 @@ local function to_hms(secs)
 	return #str == 0 and "0" or table.concat(str, "")
 end
 
-function join_paths(path1, path2)
+local function join_paths(path1, path2)
 	if not path1 or path1 == "" then
 		return path2 or ""
 	end
@@ -374,7 +374,7 @@ local function cut_render()
 		-- no source directory, so relative paths are relative to the working directory
 		outdir = join_paths(mp.utils.getcwd(), options.output_dir)
 	else
-		input_dir = mp.utils.split_path(input)
+		local input_dir = mp.utils.split_path(input)
 		outdir = join_paths(input_dir, options.output_dir)
 	end
 
