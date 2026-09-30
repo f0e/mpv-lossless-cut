@@ -22,9 +22,9 @@ Download [the latest release](https://github.com/f0e/mpv-lossless-cut/releases/l
 
 | Platform            | Path                                               |
 | ------------------- | -------------------------------------------------- |
-| **Windows**         | `%appdata%/Roaming/mpv/`                           |
+| **Windows**         | `%appdata%/mpv/`                                   |
 | **Windows (Scoop)** | `%userprofile%/scoop/persist/mpv/portable_config/` |
-| **Linux**/**MacOS** | `~/.config/mpv/`                                   |
+| **Linux**/**macOS** | `~/.config/mpv/`                                   |
 
 After that, the next time you run mpv the script will be loaded.
 
@@ -35,26 +35,27 @@ After that, the next time you run mpv the script will be loaded.
 - `lossless` - Whether the cut clips should be lossless. If set to yes, cuts may not be exact, as they can only occur at keyframes. Setting it to no will re-encode clips, but cut times will be exact.
 - `output_dir` - The output directory for cuts, can be relative or absolute. For streamed videos (e.g. playing from a URL), relative paths are relative to mpv's working directory.
   - Default value: `.` (will place cuts in the same directory as the original video)
+  - `@cwd` places cuts in mpv's working directory
 - `multi_cut_mode` - The mode for handling multiple cuts for a single video. Options:
-  - `separate`: create separate cut files (default)
-  - `merge`: merge cut files into a single cut.
-- `ffmpeg_path` - The path to the ffmpeg executable.
+  - `separate`: Create separate cut files (default)
+  - `merge`: Merge cut files into a single cut
+- `ffmpeg_path` - The path to the ffmpeg executable
   - Default value: `ffmpeg` (will find ffmpeg in your PATH)
 
 ## usage
 
 ### keybinds
 
-- <kbd>g</kbd> and <kbd>h</kbd> to set the start and end points of a cut (will use your current position).
-- <kbd>G</kbd> and <kbd>H</kbd> will do the same, but will place the points at the very start or end of the video.
-- <kbd>r</kbd> to render cuts.
+- <kbd>g</kbd> and <kbd>h</kbd> to set the start and end points of a cut (will use your current position)
+- <kbd>G</kbd> and <kbd>H</kbd> will do the same, but will place the points at the very start or end of the video
+- <kbd>r</kbd> to render cuts
 
-- <kbd>ctrl+g</kbd> to toggle between `separate` and `merge` mode.
-- <kbd>ctrl+h</kbd> to clear cuts.
+- <kbd>ctrl+g</kbd> to toggle between `separate` and `merge` mode
+- <kbd>ctrl+h</kbd> to clear cuts
 
 If you want to change the start or end position of a cut you can press the keybind again. You can also create multiple cuts from a single video.
 
-Rendered cuts will be placed in the same directory as the source file.
+Rendered cuts are placed next to the source file by default, see `output_dir` in the [options](#options).
 
 ---
 
@@ -63,6 +64,17 @@ Rendered cuts will be placed in the same directory as the source file.
 If the script doesn't work, you can try these steps.
 
 - Make sure all of the [requirements](#requirements) are installed
-- Make sure the script is installed in the correct directory. You should end up with something like: `~/.mpv/config/scripts/mpv-lossless-cut.lua`.
+- Make sure the script is installed in the correct directory. You should end up with something like: `~/.config/mpv/scripts/mpv-lossless-cut.lua`.
 - Run mpv using the terminal (`mpv video.mp4`) and check the output, are there any errors?
 - Make sure you don't have multiple versions of mpv installed. You might have installed the script to the wrong version.
+
+## development
+
+[mise](https://mise.jdx.dev) is used for tool/task management, and checks are configured & run with [hk](https://hk.jdx.dev).
+
+```sh
+mise install   # install dev dependencies
+mise run setup # [optional] set up a pre-commit hook to run checks
+mise run check # run checks
+mise run fix   # autofix issues
+```

@@ -1,0 +1,29 @@
+amends "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.3.0/hk@2.3.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+    ["stylua"] = Builtins.stylua
+    ["luacheck"] = (Builtins.luacheck) {
+        check = "luacheck --config .config/.luacheckrc --no-max-line-length {{files}}"
+    }
+    ["actionlint"] = Builtins.actionlint
+    ["zizmor"] = Builtins.zizmor
+    ["typos"] = Builtins.typos
+    ["trailing_whitespace"] = Builtins.trailing_whitespace
+    ["newlines"] = Builtins.newlines
+}
+
+hooks {
+    ["pre-commit"] {
+        fix = true
+        stash = "git"
+        steps = linters
+    }
+    ["fix"] {
+        fix = true
+        steps = linters
+    }
+    ["check"] {
+        steps = linters
+    }
+}

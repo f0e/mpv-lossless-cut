@@ -1,6 +1,5 @@
-mp.msg = require("mp.msg")
-mp.utils = require("mp.utils")
-mp.options = require("mp.options")
+local msg = require("mp.msg")
+local utils = require("mp.utils")
 
 local options = {
 	lossless = true,
@@ -9,7 +8,7 @@ local options = {
 	ffmpeg_path = "ffmpeg",
 }
 
-mp.options.read_options(options, "mpv-lossless-cut")
+require("mp.options").read_options(options, "mpv-lossless-cut")
 
 local cuts = {}
 local os_name = package.config:sub(1, 1) == "\\" and "windows"
@@ -17,7 +16,7 @@ local os_name = package.config:sub(1, 1) == "\\" and "windows"
 
 -- utility functions
 local function log(message)
-	mp.msg.info(message)
+	msg.info(message)
 	mp.osd_message(message)
 end
 
@@ -57,7 +56,7 @@ local function to_hms(secs)
 	return #str == 0 and "0" or table.concat(str, "")
 end
 
-function join_paths(path1, path2)
+local function join_paths(path1, path2)
 	if not path1 or path1 == "" then
 		return path2 or ""
 	end
@@ -129,7 +128,7 @@ end
 
 -- file operations
 local function ensure_directory_exists(dir)
-	local dir_info = mp.utils.file_info(dir)
+	local dir_info = utils.file_info(dir)
 	if not dir_info or not dir_info.is_dir then
 		local args
 		if os_name == "windows" then
@@ -138,14 +137,14 @@ local function ensure_directory_exists(dir)
 			args = { "mkdir", "-p", dir }
 		end
 
-		local res = mp.utils.subprocess({ args = args, cancellable = false })
+		local res = utils.subprocess({ args = args, cancellable = false })
 		return res.status == 0
 	end
 	return true
 end
 
 local function delete_file(file_path)
-	local file_info = mp.utils.file_info(file_path)
+	local file_info = utils.file_info(file_path)
 
 	if not file_info or file_info.is_dir then
 		return false
@@ -158,28 +157,27 @@ local function delete_file(file_path)
 		args = { "rm", file_path }
 	end
 
-	local res = mp.utils.subprocess({ args = args, cancellable = false })
+	local res = utils.subprocess({ args = args, cancellable = false })
 	return res.status == 0
 end
 
 local function set_file_times(file_path, mtime)
 	if not mtime then
-		mp.msg.warn("No mtime provided for: " .. file_path)
+		msg.warn("No mtime provided for: " .. file_path)
 		return false
 	end
 
-	local file_info = mp.utils.file_info(file_path)
+	local file_info = utils.file_info(file_path)
 	if not file_info then
-		mp.msg.error("File does not exist, cannot set times: " .. file_path)
+		msg.error("File does not exist, cannot set times: " .. file_path)
 		return false
 	end
 
 	local normalized_path = file_path:gsub([[\]], "/")
-	local success = false
 	local result
 
 	if os_name == "windows" then
-		result = mp.utils.subprocess({
+		result = utils.subprocess({
 			args = {
 				"powershell",
 				"-command",
@@ -195,7 +193,7 @@ local function set_file_times(file_path, mtime)
 			cancellable = false,
 		})
 	else
-		result = mp.utils.subprocess({
+		result = utils.subprocess({
 			args = {
 				"touch",
 				"-t",
@@ -206,13 +204,13 @@ local function set_file_times(file_path, mtime)
 		})
 	end
 
-	success = (result.status == 0)
+	local success = (result.status == 0)
 
 	if not success then
 		local error_msg = result.stderr or result.stdout or "Unknown error"
-		mp.msg.error("Failed to set file times for " .. file_path .. ": " .. error_msg)
+		msg.error("Failed to set file times for " .. file_path .. ": " .. error_msg)
 	else
-		mp.msg.verbose("Successfully set file times for: " .. file_path)
+		msg.verbose("Successfully set file times for: " .. file_path)
 	end
 
 	return success
@@ -238,7 +236,7 @@ local function run_ffmpeg(args)
 	local cmd_str = table.concat(base_args, " ")
 	print("Running ffmpeg command: " .. cmd_str)
 
-	local result = mp.utils.subprocess({
+	local result = utils.subprocess({
 		args = base_args,
 		cancellable = false,
 	})
@@ -363,18 +361,18 @@ local function cut_render()
 	local input = mp.get_property("path")
 	local filename = mp.get_property("filename")
 
-	local input_info = mp.utils.file_info(input)
+	local input_info = utils.file_info(input)
 
 	local is_stream = input_info == nil
 
 	local outdir
 	if options.output_dir == "@cwd" then
-		outdir = mp.utils.getcwd()
+		outdir = utils.getcwd()
 	elseif is_stream then
 		-- no source directory, so relative paths are relative to the working directory
-		outdir = join_paths(mp.utils.getcwd(), options.output_dir)
+		outdir = join_paths(utils.getcwd(), options.output_dir)
 	else
-		input_dir = mp.utils.split_path(input)
+		local input_dir = utils.split_path(input)
 		outdir = join_paths(input_dir, options.output_dir)
 	end
 
@@ -384,13 +382,17 @@ local function cut_render()
 		return
 	end
 
-	local filename_noext, ext = "", ""
+	local filename_noext, ext
 	local cache_offset = 0
 
 	local temp_cache_file_name = join_paths(outdir, "cache-dump.mkv")
 
 	if not is_stream then
 		filename_noext, ext = filename:match("^(.*)(%.[^%.]+)$")
+		if not filename_noext then
+			-- default to mkv if no extension, cause ffmpeg needs one
+			filename_noext, ext = filename, ".mkv"
+		end
 	else
 		filename_noext = sanitize_filename(mp.get_property("media-title"))
 		ext = ".mkv"
@@ -406,7 +408,7 @@ local function cut_render()
 		cache_offset = offset
 	end
 
-	input_info = mp.utils.file_info(input)
+	input_info = utils.file_info(input)
 
 	if not input_info then
 		log("Failed to read input file info")
@@ -509,7 +511,7 @@ local function cut_set_end(end_time)
 	local had_end_time = cuts[#cuts].end_time ~= nil
 
 	cuts[#cuts].end_time = end_time
-	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "updated" or "set", end_time))
+	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "Updated" or "Set", end_time))
 end
 
 -- key bindings
