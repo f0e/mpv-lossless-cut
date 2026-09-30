@@ -511,7 +511,7 @@ local function cut_set_end(end_time)
 	local had_end_time = cuts[#cuts].end_time ~= nil
 
 	cuts[#cuts].end_time = end_time
-	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "updated" or "set", end_time))
+	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "Updated" or "Set", end_time))
 end
 
 -- key bindings
