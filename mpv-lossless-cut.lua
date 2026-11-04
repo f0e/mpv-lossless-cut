@@ -2,10 +2,24 @@ local msg = require("mp.msg")
 local utils = require("mp.utils")
 
 local options = {
+	enabled = true,
 	lossless = true,
 	output_dir = ".",
 	multi_cut_mode = "separate",
 	ffmpeg_path = "ffmpeg",
+	-- stylua: ignore start
+	key_switch            = "F5",
+	key_cut_set_start     = "g",
+	key_cut_set_end       = "h",
+	key_cut_set_start_sof = "G",
+	key_cut_set_end_eof   = "H",
+	key_cut_seek_start    = "alt+g",
+	key_cut_seek_end      = "alt+h",
+	key_cut_toggle_mode   = "ctrl+g",
+	key_cut_clear         = "ctrl+h",
+	key_cut_render        = "c",
+	key_log_cut_time      = "C",
+	-- stylua: ignore end
 }
 
 require("mp.options").read_options(options, "mpv-lossless-cut")
@@ -37,23 +51,24 @@ local function ffmpeg_escape_filepath(path)
 	end
 end
 
-local function to_hms(secs)
-	local hours = math.floor(secs / 3600)
-	local minutes = math.floor((secs % 3600) / 60)
-	local remaining_seconds = ((secs % 3600) % 60)
+local function to_hms(secs, is_short)
+	if secs == nil then
+		return is_short and "-" or "--"
+	end
+	local h = math.floor(secs / 3600)
+	local m = math.floor((secs % 3600) / 60)
+	local s = ((secs % 3600) % 60)
 
-	local str = {}
-	if hours > 0 then
-		table.insert(str, hours .. "h")
+	local format_str = "%d:%02d:%05.2f"
+	if is_short then
+		format_str = "%d%02d%05.2f"
 	end
-	if minutes > 0 then
-		table.insert(str, minutes .. "m")
+	local duration = mp.get_property_number("duration")
+	if duration and duration < 3600 then
+		format_str = format_str:gsub("%%d:?", "", 1)
+		return string.format(format_str, m, s)
 	end
-	if remaining_seconds > 0 then
-		table.insert(str, string.format("%.1fs", remaining_seconds))
-	end
-
-	return #str == 0 and "0" or table.concat(str, "")
+	return string.format(format_str, h, m, s)
 end
 
 local function join_paths(path1, path2)
@@ -350,6 +365,18 @@ local function dump_cache(outpath)
 	return cache_start
 end
 
+-- stylua: ignore start
+local function get_cut_name(filename_noext, ext, cut)
+	return string.format(
+		"%s--%s_%s%s",
+		filename_noext,
+		to_hms(cut.start_time, true),
+		to_hms(cut.end_time,   true),
+		ext
+	)
+end
+-- stylua: ignore end
+
 local function cut_render()
 	if #cuts == 0 or not cuts[#cuts].end_time then
 		log("No complete cuts to render")
@@ -424,16 +451,7 @@ local function cut_render()
 	for i, cut in ipairs(cuts) do
 		if cut.end_time then
 			local duration = cut.end_time - cut.start_time
-
-			local cut_name = string.format(
-				"(%s) %s (%s - %s)%s",
-				#cuts == 1 and "cut" or "cut" .. i,
-				filename_noext,
-				to_hms(cut.start_time),
-				to_hms(cut.end_time),
-				ext
-			)
-
+			local cut_name = get_cut_name(filename_noext, ext, cut)
 			local cut_path = join_paths(outdir, cut_name)
 
 			log(string.format("(%d/%d) Rendering cut to %s", i, #cuts, cut_path))
@@ -483,64 +501,139 @@ local function cut_clear(silent)
 		if not silent then
 			log("Cuts cleared")
 		end
-	else
-		if not silent then
-			log("No cuts to clear")
+	elseif not silent then
+		log("No cuts to clear")
+	end
+end
+
+local function log_cut_time()
+	local s = ""
+	for i, cut in ipairs(cuts) do
+		if s ~= "" then
+			s = s .. "\n"
+		end
+		s = s .. string.format("[cut %d]: %s .. %s", i, to_hms(cut.start_time), to_hms(cut.end_time))
+	end
+	log(s)
+end
+
+local function cut_set_start(time)
+	local start_time = time ~= nil and time or mp.get_property_number("time-pos")
+	local last_cut = cuts[#cuts]
+	-- new cut only if a) no previous cut or b) after last cut
+	if not last_cut or last_cut.end_time and last_cut.end_time < start_time then
+		last_cut = {}
+		table.insert(cuts, last_cut)
+	end
+	last_cut.start_time = start_time
+	log_cut_time()
+end
+
+local function cut_set_end(time)
+	local end_time = time ~= nil and time or mp.get_property_number("time-pos")
+	local last_cut = cuts[#cuts]
+	if #cuts == 0 then
+		last_cut = { start_time = 0 }
+		table.insert(cuts, last_cut)
+	end
+	last_cut.end_time = end_time
+	log_cut_time()
+end
+
+local function cut_set_start_sof()
+	cut_set_start(0)
+end
+
+local function cut_set_end_eof()
+	cut_set_end(mp.get_property_number("duration"))
+end
+
+local function cut_seek(idx, time, s)
+	if time then
+		log(string.format("Seeking to [cut %d] %s: %.2fs", idx, s or "", time))
+		mp.set_property("time-pos", time)
+	end
+end
+
+-- index of last cut at or before time
+local function get_cut_idx(time)
+	local idx = #cuts and 1 or nil -- 1st cut if time is before
+	for i, cut in ipairs(cuts) do
+		if cut.start_time <= time then
+			idx = i
 		end
 	end
+	return idx
 end
 
-local function cut_set_start(start_time)
-	local last_cut = cuts[#cuts]
-	if not last_cut or last_cut.end_time then
-		local new_cut = { start_time = start_time }
-		table.insert(cuts, new_cut)
-		log(string.format("[cut %d] Set start time: %.2fs", #cuts, start_time))
-	else
-		last_cut.start_time = start_time
-		log(string.format("[cut %d] Updated start time: %.2fs", #cuts, start_time))
+local function cut_seek_start()
+	local time = mp.get_property_number("time-pos")
+	local idx = get_cut_idx(time)
+	if idx and time == cuts[idx].start_time then
+		idx = idx - 1 -- seek to prev cut if at start of current
 	end
+	cut_seek(idx, idx and cuts[idx] and cuts[idx].start_time or nil, "start time")
 end
 
-local function cut_set_end(end_time)
-	if #cuts == 0 then
-		log("No start point found")
-		return
+local function cut_seek_end()
+	local time = mp.get_property_number("time-pos")
+	local idx = get_cut_idx(time)
+	if idx and #cuts > idx and cuts[idx].end_time <= time then
+		idx = idx + 1 -- seek to next cut if at or after end of current
 	end
-
-	local had_end_time = cuts[#cuts].end_time ~= nil
-
-	cuts[#cuts].end_time = end_time
-	log(string.format("[cut %d] %s end time: %.2fs", #cuts, had_end_time and "Updated" or "Set", end_time))
+	cut_seek(idx, idx and cuts[idx] and cuts[idx].end_time or nil, "end time")
 end
 
 -- key bindings
-mp.add_key_binding("g", "cut_set_start", function()
-	local time = mp.get_property_number("time-pos")
-	if time ~= nil then
-		cut_set_start(time)
+
+-- stylua: ignore start
+local key_map = {
+	["cut_set_start"]     = cut_set_start,
+	["cut_set_end"]       = cut_set_end,
+	["cut_set_start_sof"] = cut_set_start_sof,
+	["cut_set_end_eof"]   = cut_set_end_eof,
+	["cut_seek_start"]    = cut_seek_start,
+	["cut_seek_end"]      = cut_seek_end,
+	["cut_toggle_mode"]   = cut_toggle_mode,
+	["cut_clear"]         = cut_clear,
+	["cut_render"]        = cut_render,
+	["log_cut_time"]      = log_cut_time,
+}
+-- stylua: ignore end
+
+local function switch_on()
+	for name, func in pairs(key_map) do
+		local key = options["key_" .. name]
+		if key ~= nil then
+			log("Binding key '" .. key .. "' to function: " .. name)
+			mp.add_key_binding(key, name, func)
+		end
 	end
-end)
+	log("mpv-lossless-cut key bindings enabled")
+end
 
-mp.add_key_binding("h", "cut_set_end", function()
-	local time = mp.get_property_number("time-pos")
-	if time ~= nil then
-		cut_set_end(time)
+local function switch_off()
+	for name, _ in pairs(key_map) do
+		mp.remove_key_binding(name)
 	end
-end)
+	log("mpv-lossless-cut key bindings removed")
+end
 
-mp.add_key_binding("G", "cut_set_start_sof", function()
-	cut_set_start(0)
-end)
+local function state_update()
+	if options.enabled then
+		switch_on()
+	else
+		switch_off()
+	end
+end
 
-mp.add_key_binding("H", "cut_set_end_eof", function()
-	cut_set_end(mp.get_property_number("duration"))
-end)
+local function switch()
+	options.enabled = not options.enabled
+	state_update()
+end
 
-mp.add_key_binding("ctrl+g", "cut_toggle_mode", cut_toggle_mode)
-mp.add_key_binding("ctrl+h", "cut_clear", cut_clear)
-
-mp.add_key_binding("r", "cut_render", cut_render)
+mp.add_key_binding(options.key_switch, "switch", switch)
+state_update()
 
 mp.register_event("end-file", function()
 	cut_clear(true)
